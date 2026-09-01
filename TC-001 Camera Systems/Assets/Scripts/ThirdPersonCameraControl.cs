@@ -11,13 +11,12 @@ public class ThirdPersonCameraControl : MonoBehaviour
     public Transform player;
     public Transform playerObj;
     public Transform reticle;
+    public float playerRotateSpd;
 
     //additional scripts
-    StatCheck stat;
     InputAbstract controls;
 
     //required variables
-    float playerRotateSpd;
     float TimeSinceCombat = 0;
     bool outOfCombat;
 
@@ -70,10 +69,6 @@ public class ThirdPersonCameraControl : MonoBehaviour
         //rotate orientation object
         Vector3 viewDirect = player.position - new Vector3(transform.position.x, player.position.y, transform.position.z);
         orient.forward = viewDirect.normalized;
-
-        //rotate player object
-        stat = player.GetComponent<StatCheck>();
-        playerRotateSpd = stat.BoostCheck(player.tag);
 
         if (currentStyle == CameraStyle.Explore)
         {
