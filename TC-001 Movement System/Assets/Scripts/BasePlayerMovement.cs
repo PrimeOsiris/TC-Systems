@@ -6,31 +6,20 @@ public class BasePlayerMovement : MonoBehaviour
 {
     [Header("Movement")]
     //Inputs
-    float xzInput;
-    float yInput;
+    float xzInput, yInput;
 
     //Non-Public Variables
-    float moveSpeed;
-    float boostSpeed;
-    Vector3 moveDirection;
-    Vector3 boostDirection;
+    Vector3 moveDirection, boostDirection;
     Rigidbody rb;
-    float jumpForce;
-    bool readyToJump;
-    bool readyToBoost;
-    FrictionCalc calc;
-    StatCheck stat;
-    InputAbstract controls;
-    bool grounded;
-    bool sloped;
-    bool exitingSlope;
+    bool readyToJump, readyToBoost, grounded, sloped, exitingSlope;
+    InputSystem_Actions controls;
     RaycastHit slopeHit;
 
     //Public Variables
     public Transform orient;
-    public float jumpCooldown;
-    public float boostCooldown;
-    public float airMulti;
+    public float jumpCooldown, boostCooldown, airMulti, moveSpeed, boostSpeed, jumpForce, speedModifier, boostModifier, jumpModifier, PlayerHeight, groundDrag, maxSlopeAngle;
+    public LayerMask ground;
+    public bool speedCapped;
 
 
     // Start is called before the first frame update
@@ -40,19 +29,16 @@ public class BasePlayerMovement : MonoBehaviour
         rb.freezeRotation = true;
         readyToJump = true;
         readyToBoost = true;
-        stat = gameObject.GetComponent<StatCheck>();
-        calc = gameObject.GetComponent<FrictionCalc>();
-        controls = new InputAbstract();
+        controls = new InputSystem_Actions();
         controls.Enable();
     }
 
     // Update is called once per frame
     void Update()
     {
-        rb.linearDamping = calc.DragCalc();
-
         PlayerInput();
-        SpeedControl();
+        if(speedCapped){ SpeedControl(); }
+        DragCalc();
     }
 
     // FixedUpdate is called at a frequency determined by editor/designer
@@ -68,8 +54,7 @@ public class BasePlayerMovement : MonoBehaviour
         yInput = Input.GetAxisRaw("Vertical");
 
         //Jump check
-        calc = gameObject.GetComponent<FrictionCalc>();
-        grounded = calc.GroundedCheck();
+        grounded = GroundedCheck();
         if (controls.Player.Jump.ReadValue<float>() > 0.5f && readyToJump && grounded)
         {
             Jump();
@@ -85,57 +70,55 @@ public class BasePlayerMovement : MonoBehaviour
     //Handles calcs for, and moves, the user
     void MovePlayer()
     {
-        sloped = calc.SlopedCheck();
-        grounded = calc.GroundedCheck();
-        moveSpeed = stat.SpeedCheck(gameObject.tag);
+        sloped = SlopedCheck();
+        grounded = GroundedCheck();
 
         moveDirection = orient.forward * yInput + orient.right * xzInput;
         if (sloped && !exitingSlope) 
         {
-            Physics.Raycast(transform.position, Vector3.down, out slopeHit, calc.PlayerHeight * 0.5f + 0.2f);
+            Physics.Raycast(transform.position, Vector3.down, out slopeHit, PlayerHeight * 0.5f + 0.2f);
             moveDirection = Vector3.ProjectOnPlane(moveDirection, slopeHit.normal).normalized;
-            rb.AddForce(moveDirection.normalized * moveSpeed * 20f, ForceMode.Force);
+            rb.AddForce(moveDirection.normalized * (moveSpeed + speedModifier) * 20f, ForceMode.Force);
 
             if (rb.linearVelocity.y > 0)
             {
                 rb.AddForce(Vector3.down * 80f, ForceMode.Force);
             }
         }
-        else if (grounded) { rb.AddForce(moveDirection.normalized * moveSpeed * 10f, ForceMode.Force); }
-        else if (!grounded) { rb.AddForce(moveDirection.normalized * moveSpeed * 10f * airMulti, ForceMode.Force); }
-        rb.useGravity = !calc.SlopedCheck();
+        else if (grounded) { rb.AddForce(moveDirection.normalized * (moveSpeed + speedModifier) * 10f, ForceMode.Force); }
+        else if (!grounded) { rb.AddForce(moveDirection.normalized * (moveSpeed + speedModifier) * 10f * airMulti, ForceMode.Force); }
+        rb.useGravity = !SlopedCheck();
     }
 
     //Handles calcs for QB (Quick Boosts)
     void QuickBoost()
     {
-        grounded = calc.GroundedCheck();
-        sloped = calc.SlopedCheck();
-        boostSpeed = stat.BoostCheck(gameObject.tag);
+        grounded = GroundedCheck();
+        sloped = SlopedCheck();
 
         boostDirection = orient.forward * yInput + orient.right * xzInput;
         if (sloped && !exitingSlope) 
         {
-            Physics.Raycast(transform.position, Vector3.down, out slopeHit, calc.PlayerHeight * 0.5f + 0.2f);
+            Physics.Raycast(transform.position, Vector3.down, out slopeHit, PlayerHeight * 0.5f + 0.2f);
             boostDirection = Vector3.ProjectOnPlane(boostDirection, slopeHit.normal).normalized;
-            rb.AddForce(boostDirection.normalized * boostSpeed * 4f, ForceMode.Impulse);
+            rb.AddForce(boostDirection.normalized * (boostSpeed + boostModifier) * 4f, ForceMode.Impulse);
 
             if (rb.linearVelocity.y > 0)
             {
-                rb.AddForce(Vector3.down * 16f, ForceMode.Force);
+                rb.AddForce(Vector3.down * 80f, ForceMode.Force);
             }
         }
-        else if (grounded) { rb.AddForce(boostDirection.normalized * boostSpeed * 2f, ForceMode.Impulse); }
-        else if (!grounded) { rb.AddForce(boostDirection.normalized * boostSpeed * 2f * airMulti, ForceMode.Impulse); }
+        else if (grounded) { rb.AddForce(boostDirection.normalized * (boostSpeed + boostModifier) * 2f, ForceMode.Impulse); }
+        else if (!grounded) { rb.AddForce(boostDirection.normalized * (boostSpeed + boostModifier) * 2f * airMulti, ForceMode.Impulse); }
         readyToBoost = false;
     }
 
     //Speed check & Speed limit
     void SpeedControl()
     {
-        moveSpeed = stat.SpeedCheck(gameObject.tag);
-        sloped = calc.SlopedCheck();
+        sloped = SlopedCheck();
 
+        //Limits speed on a slope
         if (sloped && !exitingSlope)
         {
             if(rb.linearVelocity.magnitude > moveSpeed)
@@ -143,6 +126,7 @@ public class BasePlayerMovement : MonoBehaviour
                 rb.linearVelocity = rb.linearVelocity.normalized * moveSpeed;
             }
         }
+        //Limits speeed on ground or in the air
         else
         {
             Vector3 currentVel = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
@@ -158,11 +142,36 @@ public class BasePlayerMovement : MonoBehaviour
     void Jump()
     {
         exitingSlope = true;
-        jumpForce = stat.JumpCheck(gameObject.tag);
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
-        rb.AddForce(transform.up * jumpForce, ForceMode.Impulse);
+        rb.AddForce(transform.up * (jumpForce + jumpModifier), ForceMode.Impulse);
         readyToJump = false;
     }
+
     void JumpReset() { readyToJump = true; exitingSlope = false;}
     void BoostReset() { readyToBoost = true; }
+
+    //Checks if the player is on a slope
+    bool SlopedCheck()
+    {
+        if (Physics.Raycast(transform.position, Vector3.down, out slopeHit, PlayerHeight * 0.5f * 0.2f))
+        {
+            float angle = Vector3.Angle(Vector3.up, slopeHit.normal);
+            return angle < maxSlopeAngle && angle != 0;
+        }
+        else return false;
+    }
+
+    //Checks if the player is grounded
+    bool GroundedCheck()
+    {
+        bool land = Physics.Raycast(transform.position, Vector3.down, PlayerHeight * 0.5f * 0.2f, ground);
+        return land;
+    }
+
+    //Handles Drag
+    void DragCalc()
+    {
+        if (grounded){ rb.linearDamping = groundDrag; }
+        else {rb.linearDamping = 0;}
+    }
 }
