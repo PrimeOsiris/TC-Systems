@@ -3,25 +3,29 @@ using System.Collections.Generic;
 using Unity.Cinemachine;
 using Unity.Cinemachine.TargetTracking;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class ThirdPersonCameraControl : MonoBehaviour
 {
-    //Rotation
+    //public variables
     public Transform orient;
     public Transform player;
     public Transform playerObj;
-    public Transform reticle;
+    public Transform combatTarget;
     public float playerRotateSpd;
+    public float windDown;
 
     //additional scripts
     InputAbstract controls;
 
-    //required variables
+    //private variables
     float TimeSinceCombat = 0;
     bool outOfCombat;
+    InputAction lookAction;
 
     //the camera and the styles in use
-    public GameObject exploreCam;
+    public GameObject ExploreCamera;
+    public GameObject CombatCamera;
     public CameraStyle currentStyle;
     public enum CameraStyle
     {
@@ -37,6 +41,14 @@ public class ThirdPersonCameraControl : MonoBehaviour
         controls = new InputAbstract();
         controls.Enable();
         outOfCombat = true;
+
+        lookAction = InputSystem.actions.FindAction("Look");
+
+        CombatCamera.GetComponent<CinemachineCamera>().LookAt = combatTarget;
+        CombatCamera.GetComponent<CinemachineCamera>().Follow = player;
+
+        ExploreCamera.GetComponent<CinemachineCamera>().LookAt = player;
+        ExploreCamera.GetComponent<CinemachineCamera>().Follow = player;
     }
 
     // Update is called once per frame
@@ -55,7 +67,7 @@ public class ThirdPersonCameraControl : MonoBehaviour
 
         if (!outOfCombat)
         {
-            if (TimeSinceCombat < 1f) { TimeSinceCombat += Time.deltaTime; Debug.Log(TimeSinceCombat);}
+            if (TimeSinceCombat < windDown) { TimeSinceCombat += Time.deltaTime; Debug.Log(TimeSinceCombat);}
             else 
             { 
                 outOfCombat = true;  
@@ -72,8 +84,10 @@ public class ThirdPersonCameraControl : MonoBehaviour
 
         if (currentStyle == CameraStyle.Explore)
         {
-            float HorizontalIn = Input.GetAxis("Horizontal");
-            float VerticalIn = Input.GetAxis("Vertical");
+            Vector2 moveVector = lookAction.ReadValue<Vector2>();
+
+            float HorizontalIn = moveVector.x;
+            float VerticalIn = moveVector.y;
             Vector3 inputDirect = orient.forward * VerticalIn + orient.right * HorizontalIn;
 
             if (inputDirect != Vector3.zero)
@@ -81,7 +95,7 @@ public class ThirdPersonCameraControl : MonoBehaviour
         }
         else if (currentStyle == CameraStyle.Combat)
         {
-            Vector3 viewCombat = reticle.position - new Vector3(transform.position.x, reticle.position.y, transform.position.z);
+            Vector3 viewCombat = combatTarget.position - new Vector3(transform.position.x, combatTarget.position.y, transform.position.z);
             orient.forward = viewCombat.normalized;
 
             playerObj.forward = viewCombat.normalized;
@@ -90,14 +104,17 @@ public class ThirdPersonCameraControl : MonoBehaviour
 
     void SwitchCamerStyle(CameraStyle style)
     {
-        //exploreCam.GetComponent<CinemachineCamera>().LookAt
-        if (style == CameraStyle.Explore) 
-        { 
-            exploreCam.GetComponent<CinemachineCamera>().LookAt = player;
+        CombatCamera.SetActive(false);
+        ExploreCamera.SetActive(false);
+
+        //PlayerCamera.GetComponent<CinemachineCamera>().
+        if (style == CameraStyle.Explore)
+        {
+            ExploreCamera.SetActive(true);
         }
         if (style == CameraStyle.Combat) 
         {  
-            exploreCam.GetComponent<CinemachineCamera>().LookAt = reticle; 
+            CombatCamera.SetActive(true);
         }
 
         currentStyle = style;
